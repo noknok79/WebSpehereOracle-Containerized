@@ -1,0 +1,67 @@
+trigger:
+  branches:
+    include:
+      - main
+
+ variables:
+  - name: DEV_ENV_VAR
+    value: dev_value
+  - name: TEST_ENV_VAR
+    value: test_value
+  - name: UAT_ENV_VAR
+    value: uat_value
+  - name: PREPROD_ENV_VAR
+    value: preprod_value
+  - name: PROD_ENV_VAR
+    value: prod_value
+  - name: BC_ENV_VAR
+    value: bc_value     
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: UseJavaVersion@1
+    inputs:
+      versionSpec: '11'
+      addToPath: true
+
+  - script: |
+    # Deploy infrastructure using Terraform
+    terraform init
+    terraform plan
+    terraform apply -auto-approve
+    displayName: 'Deploy Infrastructure'
+
+  - script: |
+    # Run SonarQube analysis
+    sonar-scanner
+    displayName: 'Run SonarQube Analysis'
+
+  - script: |
+    # Run OWASP ZAP security scan
+    zap-cli start
+    zap-cli open-url http://your-webapp-url
+    zap-cli spider http://your-webapp-url
+    zap-cli active-scan http://your-webapp-url
+    zap-cli report -o zap-report.html -f html
+    zap-cli alerts -l High -o zap-alerts.txt -f txt
+    displayName: 'Run OWASP ZAP Scan'
+
+  - script: |
+    # Authenticate with CyberArk
+    cyberark-cli login --username your-username --password your-password
+    # Retrieve secrets from CyberArk
+    cyberark-cli get-secret --path your-secret-path --output-file secrets.json
+    displayName: 'Retrieve Secrets from CyberArk'
+
+  - script: |
+      # Run your tests or other tasks here
+    displayName: 'Run Tests'
+
+  - script: |
+      docker stop your-webapp-container
+      docker rm your-webapp-container
+    displayName: 'Cleanup Docker Container'
+
+

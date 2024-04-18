@@ -1,0 +1,33 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+ variables:
+    - name: Dev
+      value: 'dev_value'
+    - name: Test
+      value: 'test_value'
+    - name: UAT
+      value: 'uat_value'
+    - name: Pre-production
+      value: 'preprod_value'
+    - name: Production
+      value: 'prod_value'
+    - name: Business Continuity
+      value: 'bc_value'
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      version: '6.x'
+      includePreviewVersions: true
+
+  - script: |
+      dotnet tool install --global dotnet-spo
+      dotnet spo login --tenantId <your-tenant-id> --clientId <your-client-id> --clientSecret <your-client-secret>
+      dotnet spo deploy --packagePath <path-to-solution-package> --appCatalogUrl <app-catalog-url> --skipFeatureDeployment
+    displayName: 'Deploy SharePoint Solution'

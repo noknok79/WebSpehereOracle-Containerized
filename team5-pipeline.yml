@@ -1,0 +1,103 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: DEV_ENV_VAR
+    value: dev_value
+  - name: TEST_ENV_VAR
+    value: test_value
+  - name: UAT_ENV_VAR
+    value: uat_value
+  - name: PREPROD_ENV_VAR
+    value: preprod_value
+  - name: PROD_ENV_VAR
+    value: prod_value
+  - name: BC_ENV_VAR
+    value: bc_value     
+
+  - name: tomcatVersion
+    value: '9.0.50'
+  - name: oracleVersion
+    value: '19.3.0'
+
+steps:
+  - task: UseJavaVersion@1
+    inputs:
+      versionSpec: '11'
+      addToPath: true
+
+  - task: DownloadBuildArtifacts@0
+    inputs:
+      buildType: 'current'
+      downloadType: 'single'
+      artifactName: 'war'
+
+  - script: |
+      # Install Terraform
+      wget https://releases.hashicorp.com/terraform/1.0.9/terraform_1.0.9_linux_amd64.zip
+      unzip terraform_1.0.9_linux_amd64.zip
+      sudo mv terraform /usr/local/bin/
+      rm terraform_1.0.9_linux_amd64.zip
+
+      # Deploy infrastructure with Terraform
+      cd terraform
+      terraform init
+      terraform plan
+      terraform apply -auto-approve
+    displayName: 'Deploy Infrastructure with Terraform'
+
+  - task: SonarCloudPrepare@1
+    inputs:
+      SonarCloud: 'SonarCloud Connection'
+      organization: 'your-organization'
+      scannerMode: 'CLI'
+      configMode: 'manual'
+      cliProjectKey: 'your-project-key'
+      cliProjectName: 'your-project-name'
+      cliSources: 'src'
+    displayName: 'Prepare SonarCloud Analysis'
+
+  - script: |
+      # Run OWASP ZAP scan
+      wget https://github.com/zaproxy/zaproxy/releases/download/v2.10.0/ZAP_2.10.0_Linux.tar.gz
+      tar -xzf ZAP_2.10.0_Linux.tar.gz
+      cd ZAP_2.10.0
+      ./zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
+      sleep 10
+      ./zap-cli -p 8080 status -t 60
+      ./zap-cli -p 8080 open-url http://localhost:8080
+      ./zap-cli -p 8080 spider http://localhost:8080
+      ./zap-cli -p 8080 active-scan http://localhost:8080
+      ./zap-cli -p 8080 report -o zap-report.html -f html
+      cd ..
+      rm ZAP_2.10.0_Linux.tar.gz
+    displayName: 'Run OWASP ZAP Scan'
+
+  - script: |
+      # Install CyberArk Conjur CLI
+      wget https://github.com/cyberark/conjur-cli/releases/download/v5.6.0/conjur_5.6.0_linux_amd64.tar.gz
+      tar -xzf conjur_5.6.0_linux_amd64.tar.gz
+      sudo mv conjur /usr/local/bin/
+      rm conjur_5.6.0_linux_amd64.tar.gz
+
+      # Authenticate with CyberArk Conjur
+      conjur authn login -u $CONJUR_USERNAME -p $CONJUR_PASSWORD -a $CONJUR_APPLIANCE_URL
+
+      # Retrieve secrets from CyberArk Conjur
+      export SECRET_USERNAME=$(conjur variable value dev/app/username)
+      export SECRET_PASSWORD=$(conjur variable value dev/app/password)
+    displayName: 'Retrieve Secrets from CyberArk Conjur'
+
+  - script: |
+      # Run your tests or other tasks here
+    displayName: 'Run Tests'
+
+  - script: |
+      tomcat/bin/shutdown.sh
+    displayName: 'Stop Tomcat'
+

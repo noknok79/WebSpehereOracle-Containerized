@@ -1,0 +1,47 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+  variables:
+    - name: Dev
+      value: 'dev_value'
+    - name: Test
+      value: 'test_value'
+    - name: UAT
+      value: 'uat_value'
+    - name: Pre-production
+      value: 'preprod_value'
+    - name: Production
+      value: 'prod_value'
+    - name: Business Continuity
+      value: 'bc_value'
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      version: '6.x'
+      includePreviewVersions: true
+
+  - script: |
+      dotnet tool install --global Microsoft.PowerApps.CLI
+      dotnet tool install --global Microsoft.PowerApps.Checker.CLI
+      dotnet tool install --global Microsoft.PowerApps.Maker.CLI
+    displayName: 'Install Power Apps CLI'
+
+  - script: |
+      pac auth create --url <Dynamics 365 URL> --clientid <Client ID> --clientsecret <Client Secret> --tenantid <Tenant ID>
+      pac solution init --publisher-name <Publisher Name> --publisher-prefix <Publisher Prefix> --template <Template Name>
+      pac solution add-reference --path <Path to Solution File>
+      pac solution pack --path <Path to Solution File>
+    displayName: 'Connect to Dynamics 365 and pack solution'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'solution'
+
+  
